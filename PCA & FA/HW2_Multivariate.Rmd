@@ -1,0 +1,473 @@
+---
+title: "Multivariate Analysis_HW2"
+author: "DW"
+date: "2024-04-06"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+Question 5.18:(a)
+We know the test statistic is the Hotelling T-square:
+$$ T^2 = n(\bar{X} - \mu_0)^T S^{-1} (\bar{X} - \mu_0)$$
+
+```{r}
+data1 = read.csv("C:/Users/Synlim/Desktop/hw_data/T5-2.csv",header = F)
+colnames(data1) = c("score1", "score2", "score3")
+head(data1)
+mu0 <- c(500,50,30)
+#install.packages('ICSNP')
+library(ICSNP)
+library(MASS)
+# Perform Hotelling's T-squared test
+hotelling_test <- HotellingsT2(data1, mu = mu0)#单边检验可以假设alternative = greater或者less
+
+# Print the results
+print(hotelling_test)
+
+```
+As p-value < 2.2e-16, we can reject H0 at significant level 0.05
+
+Question 5.18:(b)
+```{r}
+# Calculate the sample mean vector and covariance matrix
+sample_mean <- colMeans(data1)
+cov_matrix <- cov(data1)
+
+# Perform eigen decomposition
+eigen_result <- eigen(cov_matrix)
+
+# Calculate the degrees of freedom
+n <- nrow(data1)
+p <- ncol(data1)
+df <- n - p
+
+# Calculate the critical value of F at the 95% confidence level
+F_critical <- qf(0.95, df1 = p, df2 = df)
+print(F_critical)
+# Calculate the critical value of T-squared
+T2_critical <- ((n - 1) * p * F_critical) / (n - p)
+print(T2_critical)
+
+# Scale the square roots of the eigenvalues to get the axes lengths
+axes_lengths <- sqrt(eigen_result$values * T2_critical / n)
+
+# The eigenvectors are the directions of the axes
+axes_directions <- eigen_result$vectors
+
+# Print the lengths and directions of the axes(eigenvectors)
+print(axes_lengths)
+print(axes_directions)
+```
+Question 5.18(c):
+```{r}
+library(ggplot2)
+# Function to create a Q-Q plot for a given column
+plot_qq <- function(column_data, column_name) {
+  qq <- qqnorm(column_data, main = paste("Q-Q Plot for", column_name), col = "blue", pch = 1)
+  qqline(column_data, col = "red", lwd = 2)
+}
+
+# Create Q-Q plots for each subject
+plot_qq(data1$score1, "Social Science & History")
+plot_qq(data1$score2, "Language Expression")
+plot_qq(data1$score3, "Natural Science")
+
+# Create scatter plot for Social Science & History vs Language Expression
+plot(data1$score1, data1$score2, 
+     xlab = "Social Science & History", 
+     ylab = "Language Expression", 
+     main = "Social Science & History vs Language Expression")
+
+# Create scatter plot for Social Science & History vs Natural Science
+plot(data1$score1, data1$score3, 
+     xlab = "Social Science & History", 
+     ylab = "Natural Science", 
+     main = "Social Science & History vs Natural Science")
+
+# Create scatter plot for Language Expression vs Natural Science
+plot(data1$score2, data1$score3, 
+     xlab = "Language Expression", 
+     ylab = "Natural Science", 
+     main = "Language Expression vs Natural Science")
+```
+
+
+From the above plots, we can draw a initial conclusion:
+Social Science & History has a large probability to be from a Normal dist.
+Language Expression may not from a Normal dist. as the tails deviate from the line too much.
+Natural Science's data points all have a tendency to be more left, it's hard to from a Normal dist.
+
+Below is the extra bonferroni method:
+```{r}
+n <- nrow(data1) # Sample size
+alpha <- 0.05 # Significance level for 95% confidence
+m <- 3 # Number of comparisons/tests
+
+# Adjusted alpha for Bonferroni correction
+adjusted_alpha <- alpha / m
+
+# Find critical z-value for the adjusted confidence level(two-sided)
+z <- qnorm(1 - adjusted_alpha / 2) #计算正态分布的分位数
+
+# Calculate means and standard errors
+means <- colMeans(data1)
+sds <- apply(data1, 2, sd) #第二个参数 2 指定了 apply() 函数沿着列的方向进行操作，即对数据框的每一列应用指定的函数。
+SEs <- sds / sqrt(n)
+print(SEs)
+print(sds)
+# Construct 95% Bonferroni confidence intervals
+lower_bounds <- means - z * SEs
+upper_bounds <- means + z * SEs
+
+# Print the results (一列一列的定义)
+data.frame(Variable = names(means), Lower_Bound = lower_bounds, Upper_Bound = upper_bounds)
+```
+Question 6.16: Only do the hypothesis testing
+```{r}
+data2 <- read.csv("C:/Users/Synlim/Desktop/hw_data/T4-3.csv",header = F)
+colnames(data2) <- c("x1", "x2", "x3", "x4","d2")
+head(data2)
+```
+We consider to combine the dynamic and the static cases when analyzing:
+we test $$ H_0:C\mu = 0 $$
+
+```{r}
+means <- colMeans(data2[,1:4])
+print(means)
+#mu <- c((means[1]+means[2])/2, (means[3]+means[4])/2)
+#print(mu)
+contrast_matrix <- matrix(c(-1, 0, 1, 0, 0, -1, 1, 0, -1, 0, 0, 1), nrow = 3, byrow = TRUE)
+print(contrast_matrix)
+C <- contrast_matrix
+q <- 4
+n <- nrow(data2)
+Sn <- cov(data2[,1:4])
+S <- Sn*n/(n-1)
+print(S)
+print(Sn)
+#print(n)
+Xbar <- matrix(means, ncol = 1)
+T2 <- n * t((C %*% Xbar)) %*% (solve(C%*%S%*%t(C))) %*% (C%*%Xbar)
+print(T2)
+
+F_critical <- qf(0.95, df1 = q-1, df2 = n-q+1)
+print(F_critical)
+# Calculate the critical value of T-squared
+T2_critical <- ((n - 1) * (q-1) * F_critical) / (n - q + 1)
+print(T2_critical)
+``` 
+As T2 > T2_critical, we can reject the null hypothesis, which means there is a difference between the two kinds of measurements.
+
+Question 6.25: construction of MANOVA Table
+```{r}
+data3 <- read.csv("C:/Users/Synlim/Desktop/hw_data/T11-7.csv",header = F)
+colnames(data3) <- c("x1", "x2", "x3", "x4", "x5", "Area")
+head(data3)
+```
+```{r}
+g <- 3
+p <- ncol(data3) - 1
+table(data3$Area)
+grouped_data <- split(data3, data3$Area)
+print(grouped_data)
+```
+```{r}
+library(stats)
+xbar <- colMeans(data3[,1:5])
+xbar1 <- colMeans(data3[1:7,1:5])
+xbar2 <- colMeans(data3[8:18,1:5])
+xbar3 <- colMeans(data3[19:56,1:5])
+manova_result <- manova(cbind(data3$x1, data3$x2,data3$x3, data3$x4, data3$x5) ~ data3$Area, data = data3)
+print(manova_result)
+summary(manova_result,test = "Wilks")
+```
+We can see the p-value < 0.05, as a result, the treatments among the 3 areas are significantly different!
+
+Question 8.12:
+```{r}
+data <- read.csv("C:/Users/Synlim/Desktop/hw_data/T1-5.csv",header = F)
+colnames(data) <- c("x1", "x2", "x3", "x4", "x5", "x6","x7")
+head(data)
+```
+```{r}
+# 使用协方差矩阵进行PCA
+pca_cov <- prcomp(data, scale. = FALSE)  # scale. = FALSE意味着不先对数据进行标准化
+
+# 使用相关系数矩阵进行PCA
+pca_cor <- prcomp(data, scale. = TRUE)   # scale. = TRUE会先对数据进行标准化
+
+# 查看PCA结果
+summary(pca_cov)
+summary(pca_cor)
+
+# 查看各主成分的贡献
+pca_cov$sdev^2
+pca_cor$sdev^2
+
+# 查看由prcomp得到的主成分的载荷
+pca_cov$rotation
+pca_cor$rotation
+
+# 计算协方差矩阵
+cov_matrix <- cov(data)
+
+# 计算相关系数矩阵
+cor_matrix <- cor(data)
+print(cov_matrix)
+print(cor_matrix)
+
+eigen(cov_matrix)$values
+plot(eigen(cov_matrix)$values, type = 'l',col = 'blue')
+eigen(cor_matrix)$values
+plot(eigen(cor_matrix)$values, type = 'l',col = 'blue')
+```
+Using the covariance matrix: Yes, the first three principal components of pca_cov explain approximately 98.69% of the variance, which is very high. It's even okay to use less than 3 components.
+
+Using the correlation matrix: With only 70.38% of the variance explained by the first three components in pca_cor, it may be less clear. While 70% represents a significant portion of the variance, depending on the context and purpose of the analysis, it might not be enough to capture all the nuances of the data. More components might be needed to have a comprehensive understanding.
+
+Here, if we want to see every indicator equally important, then the cor method should be used and vice versa.
+
+For PCA based on the covariance matrix (pca_cov$rotation):
+
+The first principal component (PC1) is primarily influenced by variable x2, as it has the largest loading on PC1, close to 1.
+The second principal component (PC2) is mainly influenced by variable x6, with a significant negative loading.
+The third principal component (PC3) is influenced by multiple variables, but variables x4 and x3 have relatively high loadings.
+
+For PCA based on the correlation matrix (pca_cor$rotation):
+
+The first principal component (PC1) does not seem to have a dominant variable among all variables.
+The second principal component (PC2) is mainly influenced by x2 and x6, which have large positive and negative loadings, respectively.
+The third principal component (PC3) is dominated by negative loadings of x1 and x7, indicating negative correlations with this principal component.
+From these results, it can be seen that different principal components capture different aspects of the data. Each principal component is a linear combination of the original variables, and the magnitude and sign of the loadings indicate the contribution of each original variable to that principal component.
+
+Question 9.20:
+```{r}
+Sn <- cov(data)
+print(Sn)
+n <- nrow(data)
+S <- n*Sn/(n-1)
+print(S)
+```
+
+```{r}
+library(psych)
+# (a) Conduct PCA with one and two common factors
+mu <- colMeans(data)
+print(mu)
+
+ei_result <- eigen(S)
+print(ei_result$values)
+print(ei_result$vectors)
+
+#when m = 1
+L1 <- sqrt(ei_result$values[1])*ei_result$vectors[,1]
+print(L1)
+diag_phi1 <- diag(S - (L1)%*%t(L1))
+phi1 <- diag(diag_phi1)
+print(phi1)
+print(L1%*%t(L1)+phi1)
+
+#when m = 2
+L2 <- cbind(sqrt(ei_result$values[1])*ei_result$vectors[,1], sqrt(ei_result$values[2])*ei_result$vectors[,2])
+print(L2)
+diag_phi2 <- diag(S - (L2)%*%t(L2))
+phi2 <- diag(diag_phi2)
+print(phi2)
+
+
+#Method of MLE
+V <- sqrt(diag(diag(S)))
+print(V)
+# Conduct factor analysis using MLE with one factor
+fa_one <- factanal(data, factors = 1, rotation = "none")
+
+# Conduct factor analysis using MLE with two factors
+fa_two <- factanal(data, factors = 2, rotation = "none")
+
+# Print the results
+print(fa_one)
+print(fa_two)
+
+loading1 <- V%*%fa_one$loadings
+print(loading1)
+phi1mle <- V%*%diag(fa_one$uniquenesses)%*%V
+print(phi1mle)
+print(loading1%*%t(loading1)+phi1mle)
+
+loading2 <- V%*%fa_two$loadings
+print(loading2)
+phi2mle <- V%*%diag(fa_two$uniquenesses)%*%V
+print(phi2mle)
+print(loading2%*%t(loading2)+phi2mle)
+
+```
+The loadings and uniqueness got from 2 methods are significantly different!
+
+Question 9.21:
+
+```{r}
+#PCA method
+V <- sqrt(diag(diag(S)))
+pca_two <- principal(data, nfactors = 2, rotate = "varimax")
+
+# (b) Calculate the loading matrix for each case
+loadings_two <- V %*% pca_two$loadings
+
+# (c) Derive the communalities for the original variables
+uniqueness_two <- V %*% diag(pca_two$uniquenesses) %*% V   #uniqueness 就是phi
+print(loadings_two)
+print(uniqueness_two)
+print(loadings_two%*%t(loadings_two)+uniqueness_two)
+
+#MLE method
+# Conduct factor analysis using MLE with two factors
+fa_two <- factanal(data, factors = 2, rotation = "varimax")
+
+# Print the results
+print(fa_two)
+
+loading2 <- V%*%fa_two$loadings
+print(loading2)
+phi2mle <- V%*%diag(fa_two$uniquenesses)%*%V
+print(phi2mle)
+print(loading2%*%t(loading2)+phi2mle)
+
+#difference = PCA - MLE
+print(loadings_two - loading2)
+print(uniqueness_two - phi2mle)
+```
+We can see from the last two 'print', the output from PCA and MLE still varies!
+
+Question 9.22:(a) for the MLE and m = 2 case: loading2 and phi2mle(from the varimax case)
+```{r}
+cal_mat <- solve(t(loading2) %*% solve(phi2mle) %*% loading2) %*% t(loading2) %*%solve(phi2mle)
+mymeans <- colMeans(data)
+# 创建一个空的数据框来存储结果
+result_df <- data.frame(matrix(nrow = nrow(data), ncol = nrow(cal_mat)))
+
+# 给结果数据框添加列名
+colnames(result_df) <- paste0("Factor", 1:nrow(cal_mat))
+
+# 循环计算结果并添加到结果数据框中
+for (i in 1:nrow(data)) {
+  f <- cal_mat %*% (t(data[i,]) - mymeans)
+  result_df[i, ] <- as.vector(f)
+}
+
+# 输出结果数据框
+print(result_df)
+
+#for the regression method
+cal_mat2 <- t(loading2) %*% solve(loading2 %*% t(loading2) + phi2mle)
+
+# 创建一个空的数据框来存储结果
+result_df2 <- data.frame(matrix(nrow = nrow(data), ncol = nrow(cal_mat2)))
+
+# 给结果数据框添加列名
+colnames(result_df2) <- paste0("Factor", 1:nrow(cal_mat2))
+
+# 循环计算结果并添加到结果数据框中
+for (i in 1:nrow(data)) {
+  f <- cal_mat2 %*% (t(data[i,]) - mymeans)
+  result_df2[i, ] <- as.vector(f)
+}
+
+# 输出结果数据框
+print(result_df2)
+```
+Question 9.22:(b)factor score of PCA when m = 2
+
+```{r}
+V <- sqrt(diag(diag(S)))
+pca_two <- principal(data, nfactors = 2, rotate = "varimax")
+
+# (b) Calculate the loading matrix for each case
+loadings_two <- V %*% pca_two$loadings
+
+# (c) Derive the communalities for the original variables
+uniqueness_two <- V %*% diag(pca_two$uniquenesses) %*% V
+print(loadings_two)
+print(uniqueness_two)
+print(loadings_two%*%t(loadings_two)+uniqueness_two)
+
+cal_mat3 <- solve(t(loading2) %*% loading2) %*% t(loading2)
+mymeans <- colMeans(data)
+# 创建一个空的数据框来存储结果
+result_df3 <- data.frame(matrix(nrow = nrow(data), ncol = nrow(cal_mat3)))
+
+# 给结果数据框添加列名
+colnames(result_df3) <- paste0("Factor", 1:nrow(cal_mat3))
+
+# 循环计算结果并添加到结果数据框中
+for (i in 1:nrow(data)) {
+  f <- cal_mat3 %*% (t(data[i,]) - mymeans)
+  result_df3[i, ] <- as.vector(f)
+}
+
+# 输出结果数据框
+print(result_df3)
+```
+Question 9.22:(c)
+```{r}
+print(result_df - result_df2)
+print(result_df - result_df3)
+print(result_df2 - result_df3)
+```
+By running the code chunk above, we can see that 
+①the difference from the same MLE method is quite small, most of which are smaller than 0.5
+②the difference from the PCA and MLE are relatively larger.
+
+Question 9.23: repeat 9.20 using R instead of S
+```{r}
+R <- cor(data)
+print(R)
+#PCA method:
+pca_one <- principal(data, nfactors = 1, rotate = "none")
+pca_two <- principal(data, nfactors = 2, rotate = "none")
+
+print(pca_one$loadings)
+print(pca_one$uniquenesses)
+#print(pca_one$loadings %*% t(pca_one$loadings) + pca_one$uniquenesses)
+
+print(pca_two$loadings)
+print(pca_two$uniquenesses)
+#print(pca_two$loadings %*% t(pca_two$loadings) + pca_two$uniquenesses)
+
+# MLE method:
+fa_one <- factanal(data, factors = 1, rotation = "none")
+fa_two <- factanal(data, factors = 2, rotation = "none")
+
+# Print the results for MLE
+print(fa_one$loadings)
+print(fa_one$uniquenesses)
+#print(t(pca_one$loadings)%*%solve(diag(fa_one$uniquenesses))%*%pca_one$loadings)
+
+print(fa_two$loadings)
+print(fa_two$uniquenesses)
+#print(t(pca_two$loadings)%*%solve(diag(fa_two$uniquenesses))%*%pca_two$loadings)
+
+print(pca_one$loadings - fa_one$loadings)
+print(pca_one$uniquenesses - fa_one$uniquenesses)
+print(pca_two$loadings - fa_two$loadings)
+print(pca_two$uniquenesses - fa_two$uniquenesses)
+
+```
+From the above output, we can see the derivation from the correlation matrix has smaller difference compared to the case where the covariance matrix is used. 
+
+
+
+
+
+
+
