@@ -1,0 +1,270 @@
+---
+title: "Midterm Exam, Multivariate Analysis, Spring 2024"
+output:
+  html_document: default
+  pdf_document: default
+date: "2024/4/24"
+---
+
+# Notes
+
+1.  You have three hours to complete this exam. Show all relevant work: partial credit will be given.
+    
+2.  Gather all your answers into an R Markdown (.Rmd) file. Then, upload this R Markdown file and its compiled html or pdf file to [e3](https://e3.nycu.edu.tw/) under the folder "midterm".
+    
+3.  If you have written part of your answers in the answer book, please also upload the scanned file of your written answers.
+
+4.  You can use "STAT-Wireless" to gain access to the internet.
+
+Good luck!
+
+# Questions
+
+The dataset *oliveoil* contains 572 rows, each corresponding to a different specimen of olive oil, and 10 columns. The first and the second column correspond to the macro-area (Centre-North, South, Sardinia) and the region of origin of the olive oils, respectively. Columns 3-10 represent the following 8 chemical measurements on the acid components for the oil specimens: palmitic, palmitoleic, stearic, oleic, linoleic, linolenic, arachidic, eicosenoic. The data set *oliveoil* can be downloaded from:
+
+[https://ghuang.stat.nycu.edu.tw/course/multivariate24/files/exam/oliveoil.csv](https://ghuang.stat.nycu.edu.tw/course/multivariate24/files/exam/oliveoil.csv)
+
+The data set can also be downloaded from [e3](https://e3.nycu.edu.tw/) under "midterm".
+
+In this exam, you will be asked to perform various multivariate analyses on this data set using the R software.
+
+## Question 1
+
+To examine the differences of acid chemical measurements across three macro-areas, one can do the multivariate mean inferences.
+
+a.  (15 points) Use the one-way MANOVA to examine the overall acid chemical measurement differences among different macro-areas. Write out its MANOVA table for comparing population mean vectors. What is the null hypothesis of this test? What do the test results tell you?
+```{r}
+data <- read.csv("C:/Users/Synlim/Downloads/oliveoil.csv")
+head(data)
+```
+```{r}
+data$macro.area <- as.factor(data$macro.area)
+
+# MANOVA
+manova_result <- manova(cbind(palmitic, palmitoleic, stearic, oleic, linoleic, linolenic, arachidic, eicosenoic) ~ data$macro.area, data=data)
+
+
+summary(manova_result)
+```
+Solution: 
+For this question, the null hypothesis H0: The treatments are all equal(population mean vectors are all equal). H1: ~ NOT equal.
+
+We can see the p-value for the test is <2.2e-16, as a result, we can reject H0 and get that we think the mean vectors are significantly different.
+
+ 
+b.  (15 points) Also, perform the one-way ANOVA on each each acid measurement (8 variables in total) for its differences over macro-areas. Since we need to perform the test for multiple measurements simultaneously in the ANOVA analysis, what is the cut-off for the p-value, below which can be considered to be significant? Which acid measurement(s) are significantly different over macro-areas?
+
+```{r}
+#ANOVA
+anova_results <- list()
+acid_measurements <- c("palmitic", "palmitoleic", "stearic", "oleic", "linoleic", "linolenic", "arachidic", "eicosenoic")
+for (measurement in acid_measurements) {
+  formula <- as.formula(paste("data$" ,measurement, "~ data$macro.area"))
+  anova_results[[measurement]] <- summary(aov(formula, data=data))
+}
+
+
+anova_results
+```
+Solution:
+From the output, we can see that if we set significant value to be alpha = 0.05, then according to Bonferroni, we set the adjusted_alpha to be 0.05/8.
+
+We can see all of the p-value are <2e-16 except for stearic, which is 0.625.
+For stearic, we fail to reject H0: treatments all equal. Consequently, all acid measurements except stearic are significantly different over macro-areas.
+
+
+## Question 2
+
+(30 points) Now, you will be asked to perform the principal component analysis (PCA), the orthogonal factor analysis (FA) with a proper factor rotation, and the multidimensional scaling (MDS). 
+    
+Plot all observations in the *oliveoil* data set by their 1st and 2nd principal components from PCA. Also, plot them in terms of their 2 factor scores of FA. The two-dimensional representation produced by MDS is requested. In these figures, you should use different colors for observations from different macro-areas. What do these figures tell you about the closeness of three macro-areas on acid measurements?
+
+```{r}
+library(stats)
+library(factoextra)
+library(MASS)
+
+# 选择需要进行PCA和FA分析的列
+analysis_columns <- c('palmitic', 'palmitoleic', 'stearic', 'oleic', 'linoleic', 'linolenic', 'arachidic', 'eicosenoic')
+data_for_analysis <- data[, analysis_columns]
+
+# PCA
+pca_result <- prcomp(data_for_analysis, scale. = TRUE) #标准化数据
+pca_data <- as.data.frame(pca_result$x)
+pca_data
+
+# 绘制PCA的前两个主成分
+fviz_pca_ind(pca_result, col.ind = data$macro.area, 
+             addEllipses = TRUE, ellipse.level = 0.95)
+
+# FA
+fa_result <- factanal(factors = 2, covmat = cor(data_for_analysis), rotation = "varimax")
+loading2 <- fa_result$loadings
+phi2mle <- fa_result$uniquenesses
+phi2mle
+cal_mat <- solve(t(loading2) %*% solve(diag(phi2mle)) %*% loading2) %*% t(loading2) %*%solve(diag(phi2mle))
+mymeans <- colMeans(data_for_analysis)
+
+# 创建一个空的数据框来存储结果
+fa_scores <- data.frame(matrix(nrow = nrow(data_for_analysis), ncol = nrow(cal_mat)))
+
+D_12 <- sqrt(solve(diag(diag(cov(data_for_analysis)))))
+D_12
+
+colnames(fa_scores) <- paste0("Factor", 1:nrow(cal_mat))
+
+# 循环计算结果并添加到结果数据框中
+for (i in 1:nrow(data_for_analysis)) {
+  f <- cal_mat %*% D_12 %*% (t(data_for_analysis[i,]) - mymeans)
+  fa_scores[i, ] <- as.vector(f)
+}
+
+# 输出结果数据框
+print(fa_scores)
+
+# 确保宏区域是一个因子类型
+data$macro_area <- as.factor(data$macro.area)
+# 生成一个颜色向量，为每个宏区域等级分配一个颜色
+area_colors <- rainbow(length(levels(data$macro_area)))
+# 绘制FA的两个因子得分，使用生成的颜色向量
+plot(fa_scores[,1], fa_scores[,2], col = area_colors[data$macro_area], pch = 19, 
+     xlab = "Factor 1", ylab = "Factor 2", main = "Factor Analysis Scores")
+# 添加图例
+legend("topright", legend = levels(data$macro_area), 
+       col = area_colors, pch = 19)
+
+```
+```{r}
+# MDS
+mds_result <- isoMDS(dist(data_for_analysis)) 
+mds_data <- as.data.frame(mds_result$points)
+#mds_data
+#mds_result
+# 绘制MDS的两维表示
+plot(mds_data[,1], mds_data[,2], col = area_colors[data$macro_area], pch = 19, xlab = "Dimension 1", ylab = "Dimension 2")
+legend("topright", levels(data$macro_area), 
+       col = area_colors, pch = 19)
+```
+
+
+
+## Question 3
+
+Do (1) the agglomerative hierarchical clustering with average linkage, (2) the k-means clustering, and (3) the model-based clustering that adopts the Gaussian mixture model with covariance matrices $\boldsymbol{\Sigma}_{1}=\cdots=\boldsymbol{\Sigma}_{3}=\boldsymbol{\Sigma}$.
+    
+a.  (10 points) Which approach has the best performance in clustering specimens from the same macro-area together?
+```{r}
+library(mclust)
+library(cluster)
+library(factoextra)
+# 使用除前两列之外的所有列进行聚类分析
+data_for_clustering <- data[, 3:10]
+#data_for_clustering
+# (1) 层次聚类
+hc <- hclust(dist(data_for_clustering), method = "average")
+hc_clusters <- cutree(hc, k = 3)
+hc_clusters
+# (2) Kmeans聚类
+set.seed(123) 
+kmeans_result <- kmeans(data_for_clustering, centers = 3, nstart = 25)
+?kmeans
+# (3) GMM模型
+set.seed(123)
+gmm_clusters <- Mclust(data_for_clustering, G = 3, modelNames="EEE")
+gmm_clusters$classification
+# 假设已经完成了上述的聚类步骤
+
+# 计算轮廓系数
+hc_silhouette <- silhouette(hc_clusters, dist(data_for_clustering))
+kmeans_silhouette <- silhouette(kmeans_result$cluster, dist(data_for_clustering))
+gmm_silhouette <- silhouette(gmm_clusters$classification, dist(data_for_clustering))
+
+# 计算每种聚类的平均轮廓宽度
+hc_avg_silhouette <- mean(hc_silhouette[, 3])
+kmeans_avg_silhouette <- mean(kmeans_silhouette[, 3])
+gmm_avg_silhouette <- mean(gmm_silhouette[,3])
+
+# 绘制轮廓图比较
+par(mfrow=c(3, 1)) # 设置图形排列为3行1列
+
+# 层次聚类的轮廓图
+plot(hc_silhouette, col = hc_clusters, main = paste("Hierarchical Clustering Average Silhouette Width:", round(hc_avg_silhouette, 3)))
+
+# K均值聚类的轮廓图
+plot(kmeans_silhouette, col = kmeans_result$cluster, main = paste("K-Means Clustering Average Silhouette Width:", round(kmeans_avg_silhouette, 3)))
+
+# 高斯混合模型聚类的轮廓图
+plot(gmm_silhouette, col = gmm_clusters$classification, main = paste("GMM Clustering Average Silhouette Width:",round(gmm_avg_silhouette, 3)))
+
+# 恢复正常图形设置
+par(mfrow=c(1, 1))
+
+# 创建一个交叉表
+table(data$macro.area, hc_clusters)
+table(data$macro.area, kmeans_result$cluster)
+table(data$macro.area, gmm_clusters$classification)
+
+# 聚类可视化
+fviz_cluster(list(data = data_for_clustering, cluster = hc_clusters))
+fviz_cluster(list(data = data_for_clustering, cluster = kmeans_result$cluster))
+fviz_cluster(list(data = data_for_clustering, cluster = gmm_clusters$classification))
+
+
+```
+From the above Silhouette and visualization in the output, average linkage have a slightly higher Silhouette width than k-means. However, it behaves really bad for the 3rd cluster, which has only one element.
+
+So with a balance, k-means method might have the best fit for the overall data from my perspective
+
+        
+b.  (10 points) From the results of k-means clustering, what are the (total) within-cluster sum of squares and the between-cluster sum of squares?
+        
+```{r}
+total_withinss <- kmeans_result$tot.withinss
+total_betweenss <- kmeans_result$betweenss
+
+print(total_withinss)
+print(total_betweenss)
+```
+
+
+c.  (10 points) For model-based clustering, write out the Gaussian mixture model used for clustering. Please specify the estimated values of the parameters in the model.
+    
+```{r}
+gmm_summary <- summary(gmm_clusters, parameters = TRUE)
+print(gmm_summary$mean)
+gmm_summary$variance
+print(gmm_summary$variance)
+posterior <- gmm_clusters$z
+head(posterior)
+```
+
+
+d.  (10 points) To assess cluster fit, you are asked to create the silhouette plot for each of the clustering approaches. Which approach has the best cluster fit based on the average silhouette width? 
+
+```{r}
+# 计算轮廓系数
+hc_silhouette <- silhouette(hc_clusters, dist(data_for_clustering))
+kmeans_silhouette <- silhouette(kmeans_result$cluster, dist(data_for_clustering))
+gmm_silhouette <- silhouette(gmm_clusters$classification, dist(data_for_clustering))
+
+# 计算每种聚类的平均轮廓宽度
+hc_avg_silhouette <- mean(hc_silhouette[, 3])
+kmeans_avg_silhouette <- mean(kmeans_silhouette[, 3])
+gmm_avg_silhouette <- mean(gmm_silhouette[,3])
+
+# 绘制轮廓图比较
+par(mfrow=c(3, 1)) 
+
+# 层次聚类的轮廓图
+plot(hc_silhouette, col = hc_clusters, main = paste("Hierarchical Clustering Average Silhouette Width:", round(hc_avg_silhouette, 3)))
+
+# Kmeans聚类的轮廓图
+plot(kmeans_silhouette, col = kmeans_result$cluster, main = paste("K-Means Clustering Average Silhouette Width:", round(kmeans_avg_silhouette, 3)))
+
+# GMM的轮廓图
+plot(gmm_silhouette, col = gmm_clusters$classification, main = paste("GMM Clustering Average Silhouette Width:",round(gmm_avg_silhouette, 3)))
+
+```
+Solution:
+As we can see 0.52 is the largest number in the diagram, consequently, the average linkage method has the best cluster fit based on the average silhouette width.
+
