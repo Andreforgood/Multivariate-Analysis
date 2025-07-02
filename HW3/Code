@@ -1,0 +1,245 @@
+---
+title: "Multivariate HW03"
+author: "Dongwen Ou"
+date: "2024-04-22"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+### Question 12.17(a):
+```{r}
+data1 <- read.csv("C:/Users/Synlim/Desktop/hw_data/T8-6.csv", header = F)
+
+rownames(data1) <- data1[,1]
+
+# 然后去除第一列，因为它现在已经成为了行名称
+data1 <- data1[,-1]
+head(data1)
+# 第二步：计算欧氏距离
+distance_matrix <- dist(data1, method = "euclidean", diag = T)
+
+# 查看距离矩阵
+print(distance_matrix)
+
+```
+### Question 12.17(b):
+```{r}
+# 单链接
+single_linkage <- hclust(distance_matrix, method = "single")
+
+# 完全链接
+complete_linkage <- hclust(distance_matrix, method = "complete")
+
+# 绘制树状图比较结果
+par(mfrow = c(1, 2), cex = 0.4) # 分割绘图区域
+plot(single_linkage, main = "Single Linkage Dendrogram")
+plot(complete_linkage, main = "Complete Linkage Dendrogram")
+
+```
+Differences: 
+The height scales for the two dendrograms are quite different, indicating that the complete linkage method tends to have a larger range of distances between clusters than the single linkage method.
+
+The single linkage dendrogram has a "chain-like" structure, where clusters are formed by adding the nearest single element at a time. 
+
+The complete linkage dendrogram, on the other hand, shows a more balanced structure with clusters that appear to be more cohesive. Complete linkage avoids chaining by only combining clusters if all elements in one cluster are close to all elements in the other cluster, leading to more compact clusters.
+
+### Question 12.17(c): K-means
+```{r}
+# K值
+k_values <- c(2, 3, 4, 5) 
+k_means_results <- list()
+
+for (k in k_values) {
+  set.seed(123) # 设置随机种子以便结果可重复
+  k_means_results[[paste("k=", k, sep="")]] <- kmeans(data1, centers = k)
+}#注意双括号提取
+
+# 查看不同K值的聚类结果
+k_means_results
+```
+### Additional questions for 12.17:
+```{r}
+#install.packages("cluster")
+library(cluster)
+
+# 执行Ward的层次聚类
+ward_clustering <- hclust(distance_matrix, method = "ward.D2")
+
+# 选择聚类数，比如我们这里选择了2到5
+k_values <- 2:5
+silhouette_scores <- list()
+
+for (k in k_values) {
+  # 对于每个k值，根据Ward的层次聚类结果进行分割
+  cluster_assignments <- cutree(ward_clustering, k = k)
+  # 计算轮廓宽度
+  silhouette_scores[[paste("k=", k, sep="")]] <- silhouette(cluster_assignments, distance_matrix)
+}
+
+# 绘制轮廓图
+par(mfrow = c(2, 2),cex = 0.6) # 根据k值的数量调整子图布局
+for (k in k_values) {
+  plot(silhouette_scores[[paste("k=", k, sep="")]], main = paste("Silhouette Plot for k =", k))
+}
+
+plot(ward_clustering, main = 'Wards Dendrogram')
+```
+Comparisons for all of the clustering methods:
+```{r}
+# 加载必要的库
+library(cluster)
+
+# 分别对Ward's、单链接、完全链接方法进行层次聚类
+hc_wards <- hclust(distance_matrix, method = "ward.D2")
+hc_single <- hclust(distance_matrix, method = "single")
+hc_complete <- hclust(distance_matrix, method = "complete")
+
+# 选择聚类数，例如用之前确定的k值
+k_values <- 2:5
+
+# 创建一个空列表来存储轮廓分数对象
+silhouette_list <- list()
+
+# 为每种方法和每个k值计算轮廓系数
+for (k in k_values) {
+  # 分别为每种层次聚类方法计算轮廓系数
+  clustering_wards <- cutree(hc_wards, k)
+  clustering_single <- cutree(hc_single, k)
+  clustering_complete <- cutree(hc_complete, k)
+  
+  # 对K均值聚类进行相同的处理
+  set.seed(123)  # 为可重复性设置种子
+  clustering_kmeans <- kmeans(data1, centers = k)$cluster
+  
+  # 计算轮廓宽度
+  silhouette_wards <- silhouette(clustering_wards, distance_matrix)
+  silhouette_single <- silhouette(clustering_single, distance_matrix)
+  silhouette_complete <- silhouette(clustering_complete, distance_matrix)
+  silhouette_kmeans <- silhouette(clustering_kmeans, distance_matrix)
+  
+  # 将轮廓对象存储在列表中
+  silhouette_list[[paste("Wards_k", k, sep="")]] <- silhouette_wards
+  silhouette_list[[paste("Single_k", k, sep="")]] <- silhouette_single
+  silhouette_list[[paste("Complete_k", k, sep="")]] <- silhouette_complete
+  silhouette_list[[paste("Kmeans_k", k, sep="")]] <- silhouette_kmeans
+}
+
+# 生成轮廓图
+#par(mfrow=c(4,4))  # 调整子图布局，根据需要可能要调整
+for (k in k_values) {
+  plot(silhouette_list[[paste("Wards_k", k, sep="")]], main=paste("Wards k=", k))
+  plot(silhouette_list[[paste("Single_k", k, sep="")]], main=paste("Single k=", k))
+  plot(silhouette_list[[paste("Complete_k", k, sep="")]], main=paste("Complete k=", k))
+  plot(silhouette_list[[paste("Kmeans_k", k, sep="")]], main=paste("Kmeans k=", k))
+}
+
+```
+The above results are from 4 clustering methods and different designated number of clusters, namely, wards, single, complete and k-means ranging from 2 to 5 for number of clusters.
+
+It seems that the average silhouette width would decrease as the number of clusters increase. The best one according to average silhouette width is single with cluster number 2.
+
+### Question 12.19:
+
+```{r}
+# Step 1: Read the CSV file
+distances <- read.csv("C:/Users/Synlim/Desktop/hw_data/T12-13.csv", header = FALSE)
+
+# Convert the lower triangle matrix into a full matrix
+distance_matrix <- as.matrix(distances)
+distance_matrix[upper.tri(distance_matrix)] <- t(distance_matrix)[upper.tri(distance_matrix)]
+print(distance_matrix)
+
+# Step 2: Multidimensional Scaling for 3, 4, and 5 dimensions
+mds_3 <- cmdscale(distance_matrix, k = 3)
+mds_4 <- cmdscale(distance_matrix, k = 4)
+mds_5 <- cmdscale(distance_matrix, k = 5)
+print(mds_3)
+print(mds_4)
+print(mds_5)
+
+#as.matrix(dist(mds_3)) - diag(9)
+#as.matrix(dist(mds_3, diag = T, upper = T)) - diag(9)
+#dist(mds_3, diag = T, upper = T)
+#这里注意到 dist函数的返回值需要转化为matrix后才可以与导入数据转化为matrix后的数据相减
+
+# Step 3: Calculate stress and plot stress vs dimensions
+
+stress_values <- sapply(3:5, function(k) {       #sapply(数据，func)返回值与func相同
+  mds <- cmdscale(distance_matrix, k = k)
+  #sum((distance_matrix - as.matrix(dist(mds)))^2)
+  sqrt(sum((distance_matrix - as.matrix(dist(mds)))^2)/ sum((as.matrix(dist(mds)))^2))
+})
+
+# Plot stress vs number of dimensions
+plot(3:5, stress_values, type = "b", xlab = "Number of dimensions (q)", ylab = "Stress")
+
+# Step 4: Plot the sites in 2 dimensions
+# Here we use the solution from 5 dimensions and take the first two principal components
+plot(mds_5[, 1:2], xlab = "PC1", ylab = "PC2", main = "MDS in 2 dimensions")
+
+```
+### Question 12.31(a):
+```{r}
+library(mclust)
+#install.packages('readr')
+library(readr)
+
+# 读取数据
+data_path <- "C:/Users/Synlim/Desktop/hw_data/T11-7.csv" 
+oil_data <- read_csv(data_path, col_names = FALSE) 
+colnames(oil_data) <- c('Viscosity', 'Density', 'Sulphur', 'Refractive_Index', 'Colour','label')
+
+head(oil_data)
+print(oil_data)
+# 选择聚类的特征
+features <- oil_data[, c('Viscosity', 'Density', 'Sulphur', 'Refractive_Index', 'Colour')]
+
+# 数据标准化
+features_scaled <- scale(features)
+
+# 应用MCLUST模型
+# 我们将探索不同数量的聚类（从1到7）
+bic_values <- mclustBIC(features_scaled, G=1:7)
+summary(bic_values)
+bic_values
+#?mclustBIC
+#?Mclust
+
+plot(bic_values, what = "BIC")
+
+```
+From the output, we can see the best model regarding BIC is VII,3 model.
+
+### Question 12.31(b):
+
+We shall see the comparison using a confusion matrix
+```{r}
+best_model <- Mclust(features_scaled, G = 3)
+#G应该写聚类数量
+
+summary(best_model)
+best_model$classification
+
+# 可视化
+plot(best_model, what = "classification")
+
+#data preprocessing
+unique_classes <- unique(oil_data$label)
+print(unique_classes)
+oil_data[, 'new_label']<- as.integer(factor(oil_data$label, levels = unique_classes))
+head(oil_data)
+
+#install.packages('caret')
+library(caret)  # 载入caret包用于生成混淆矩阵
+predicted_classes <- best_model$classification  # 从Mclust模型获取预测类别
+confusionMatrix(factor(predicted_classes), factor(oil_data$new_label))
+
+```
+
