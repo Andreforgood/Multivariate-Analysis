@@ -1,0 +1,301 @@
+---
+title: "Final Exam, Multivariate Analysis, Spring 2024, Dongwen Ou"
+output: html_document
+date: "2024/6/12"
+---
+
+# Notes
+
+1.  You have three hours to complete this exam. Show all relevant work: partial credit will be given. Good luck!
+
+2.  Gather all your answers into an R Markdown (.Rmd) file. Then, upload this R Markdown file and its compiled html file to [e3](https://e3.nycu.edu.tw/) under the folder "final".
+
+3.  If you have written part of your answers in the answer book, please also upload the scanned file of your written answers.
+
+4.  You can use "STAT-Wireless" to gain access to the internet.
+
+# Data
+
+This exam will analyze the chest X-ray (CXR) images provided by the E-Da Hospital with disease labels for the classification model building. The images here have been pre-processed and summarized, resulting in 32 features (variables) to represent each image.
+
+These chest X-ray images are either from disease-free subjects (normal), or may contain one of the two abnormalities in the chest.
+
+To reduce the computational burden, we randomly selected 255 training observations and 57 testing observations for the following analysis. These two data sets (`CXR_train.csv` and `CXR_test.csv`) can be downloaded from [e3](https://e3.nycu.edu.tw/) under the folder "final". They contain observations on
+
+| Column | Variable | Description                                                             |
+|:-------|:---------|:------------------------------------------------------------------------|
+| 1      | iid      | Image unique ID                                                         |
+| 2      | disease  | Disease status of the image: 0=normal, 1=abnormality 1, 2=abnormality 2 |
+| 3-34   | F1-F32   | 32 image features                                                       |
+|        |          |                                                                         |
+
+# Questions
+
+The objective is to design an abnormality detector that uses 32 features to predict image disease status. This is a supervised learning problem, with the outcome the class variable `disease`. 
+
+When performing supervised learning on high dimensional data, i.e., many predictors, the procedure is first to perform feature extraction to achieve dimension reduction and then apply machine learning classification to predict data’s class labels. 
+
+We thus propose the following four approaches to build the spam detector. **You are asked to implement these four approaches and evaluate their performance. Use `CXR_train.csv` to train the model and `CXR_test.csv` to obtain the misclassification rate.**
+
+## Approach 1
+
+### Feature extraction (10 points):
+
+a.  Pick up the features whose values are significantly different among different disease classes. 
+
+b.  Since we need to perform the tests for multiple features simultaneously, the cut-off for the p-value, below which can be considered to be significant, needs to be set with care.
+
+Solution:
+```{r}
+library(MASS)
+library(caret)
+
+# get data
+CXR_train <- read.csv("/Users/dongwenou/Downloads/多元统计分析tw/CXR_train.csv", header = TRUE)
+CXR_test <- read.csv("/Users/dongwenou/Downloads/多元统计分析tw/CXR_test.csv", header = TRUE)
+
+head(CXR_train)
+
+set.seed(2024)
+
+# data normalization
+CXR_train_normalized <- scale(CXR_train[, -c(1, 2)])
+CXR_test_normalized <- scale(CXR_test[, -c(1, 2)])
+
+head(CXR_train_normalized)
+
+# using ANOVA to select the significant p-value
+anova_results <- apply(CXR_train_normalized, 2, function(x) {
+  aov_result <- aov(x ~ as.factor(CXR_train$disease))
+  p_value <- summary(aov_result)[[1]][["Pr(>F)"]][1]
+  return(p_value)
+})
+
+print(anova_results)
+
+# Bonferroni correction
+p_value_cutoff <- 0.05 / ncol(CXR_train_normalized) 
+print(p_value_cutoff)
+
+# select significant features
+selected_features <- names(anova_results[anova_results < p_value_cutoff])
+CXR_train_selected <- CXR_train_normalized[, selected_features]
+CXR_test_selected <- CXR_test_normalized[, selected_features]
+
+# get back the disease column
+CXR_train_selected <- data.frame(disease = CXR_train$disease, CXR_train_selected)
+CXR_test_selected <- data.frame(disease = CXR_test$disease, CXR_test_selected)
+
+head(CXR_train_selected)
+head(CXR_test_selected)
+
+#feature_index <- 11
+#feature_data <- CXR_train_normalized[, feature_index]
+#anova_result_single <- summary(aov(feature_data ~ as.factor(CXR_train$disease)))[[1]][["Pr(>F)"]][1]
+#summary(aov(feature_data ~ as.factor(CXR_train$disease)))
+#print(anova_result_single)
+```
+From above, I found that all the features are significantly different among different disease classes.
+
+### Machine learning classification: 
+
+a.  (10 points) Use these selected features to run linear discriminant analysis and quadratic discriminant analysis. 
+
+b.  (10 points) Use the 5-fold cross-validation (CV) to decide linear or quadratic discriminant analysis to be applied.
+
+c.  (10 points) Select linear or quadratic discriminant analysis to be used based on the CV misclassification rate.
+
+Solution:
+```{r}
+# train LDA with selected features
+lda_model <- lda(disease ~ ., data = CXR_train_selected)
+print(lda_model)
+# train QDA with selected features
+qda_model <- qda(disease ~ ., data = CXR_train_selected)
+
+# 5 fold CV
+folds <- createFolds(CXR_train$disease, k = 5, list = TRUE)
+
+lda_errors <- c()
+qda_errors <- c()
+
+for (i in 1:5) {
+  train_indices <- unlist(folds[-i])
+  valid_indices <- unlist(folds[i])
+  
+  train_data <- CXR_train_selected[train_indices, ]
+  valid_data <- CXR_train_selected[valid_indices, ]
+  
+  # train LDA model
+  lda_model <- lda(disease ~ ., data = train_data)
+  lda_pred <- predict(lda_model, newdata = valid_data)$class
+  lda_error <- mean(lda_pred != valid_data$disease)
+  lda_errors <- c(lda_errors, lda_error)
+  
+  # train QDA model
+  qda_model <- qda(disease ~ ., data = train_data)
+  qda_pred <- predict(qda_model, newdata = valid_data)$class
+  qda_error <- mean(qda_pred != valid_data$disease)
+  qda_errors <- c(qda_errors, qda_error)
+}
+
+print(lda_errors)
+print(qda_errors)
+
+# choose model with lower misclassfication rate on the validation set.
+if (mean(lda_errors) < mean(qda_errors)) {
+  final_model <- lda(disease ~ ., data = CXR_train_selected)
+  model_type <- "LDA"
+} else {
+  final_model <- qda(disease ~ ., data = CXR_train_selected)
+  model_type <- "QDA"
+}
+```
+
+### Calculate the misclassification rate on test data (10 points)
+```{r}
+# predict on the test data 
+if (model_type == "LDA") {
+  test_pred <- predict(final_model, newdata = CXR_test_selected)$class
+} else {
+  test_pred <- predict(final_model, newdata = CXR_test_selected)$class
+}
+
+misclassification_rate <- mean(test_pred != CXR_test_selected$disease)
+
+cat("final model：", model_type, "\n")
+cat("misclassification rate on the test set：", misclassification_rate, "\n")
+```
+
+
+
+## Approach 2
+
+### Feature extraction (10 points): 
+
+a.  Perform PCA to obtain principal components (PCs), using the correlation matrix. 
+
+b.  Select the number of PCs to explain at least 90% of the total variation.
+
+Solution:
+```{r}
+library(caret)
+library(e1071)
+
+# get data
+CXR_train <- read.csv("/Users/dongwenou/Downloads/多元统计分析tw/CXR_train.csv", header = TRUE)
+CXR_test <- read.csv("/Users/dongwenou/Downloads/多元统计分析tw/CXR_test.csv", header = TRUE)
+
+set.seed(2024)
+
+# data normalization
+CXR_train_normalized <- scale(CXR_train[, -c(1, 2)])
+CXR_test_normalized <- scale(CXR_test[, -c(1, 2)])
+
+# using PCA for feature extraction
+pca_model <- prcomp(CXR_train_normalized, scale. = TRUE)
+
+# at least explain 90% variance
+cumsum(pca_model$sdev^2) / sum(pca_model$sdev^2)
+explained_variance <- cumsum(pca_model$sdev^2) / sum(pca_model$sdev^2)
+num_pcs <- which(explained_variance >= 0.90)[1]
+print(num_pcs)
+
+# get PC
+CXR_train_pca <- data.frame(disease = CXR_train$disease, pca_model$x[, 1:num_pcs])
+CXR_test_pca <- data.frame(disease = CXR_test$disease, predict(pca_model, newdata = CXR_test_normalized)[, 1:num_pcs])
+
+head(CXR_train_pca)
+head(CXR_test_pca)
+```
+
+### Machine learning classification: 
+
+a.  (10 points) Use these PCs to run the support vector machine classifier. 
+
+b.  (10 points) Randomly split the data set `CXR_train.csv` in a 80:20 ratio for training and validation respectively. 
+
+c.  (10 points) Use the training part to train the model with different kernel functions: linear, polynomial, radial, and sigmoid kernels, and calculate their misclassification rates on the validation part. Decide the "best" kernal function based on these misclassification rates.
+
+Solution:
+```{r}
+# split the training set by 80:20
+trainIndex <- createDataPartition(CXR_train_pca$disease, p = 0.8, list = FALSE)
+CXR_train_pca_train <- CXR_train_pca[trainIndex,]
+CXR_train_pca_valid <- CXR_train_pca[-trainIndex,]
+head(CXR_train_pca_train)
+head(class(CXR_train_pca_train$disease))
+
+# to help the analysis later
+testIndex <- createDataPartition(CXR_test_pca$disease, p = 1, list = FALSE)
+CXR_test_pca <- CXR_test_pca[testIndex,]
+
+trainIndex2 <- createDataPartition(CXR_train_pca$disease, p = 1, list = FALSE)
+CXR_train_pca2 <- CXR_train_pca[trainIndex2,]
+head(CXR_train_pca2)
+
+# make sure the label is a factor
+CXR_train_pca_train$disease <- as.factor(CXR_train_pca_train$disease)
+CXR_train_pca_valid$disease <- as.factor(CXR_train_pca_valid$disease)
+CXR_test_pca$disease <- as.factor(CXR_test_pca$disease)
+CXR_train_pca2$disease <- as.factor(CXR_train_pca2$disease)
+
+# define SVM kernel functions
+kernels <- c("linear", "polynomial", "radial", "sigmoid")
+errors <- c()
+
+
+#CXR_train_pca_train <- CXR_train_pca_train[, -1]
+#CXR_train_pca_valid <- CXR_train_pca_valid[, -1]
+
+#svm_model <- svm(disease ~ ., data = CXR_train_pca_train, kernel = 'linear', probability = TRUE)
+#svm_pred_prob <- predict(svm_model, newdata = CXR_train_pca_valid, probability = TRUE)
+#print(svm_pred_prob)
+#svm_pred <- attr(svm_pred_prob, "probabilities")
+#print(svm_pred)
+#svm_pred_class <- colnames(svm_pred)[max.col(svm_pred, ties.method = "first")]
+
+# perform training and validation using different kernel functions
+for (kernel in kernels) {
+  svm_model <- svm(disease ~ ., data = CXR_train_pca_train, kernel = kernel, probability = TRUE)
+  svm_pred_prob <- predict(svm_model, newdata = CXR_train_pca_valid[,-1], probability = TRUE)
+  head(svm_pred_prob)
+  svm_pred <- attr(svm_pred_prob, "probabilities")
+  svm_pred_class <- colnames(svm_pred)[max.col(svm_pred, ties.method = "first")]
+  head(svm_pred_class)
+  valid_labels <- as.character(CXR_train_pca_valid$disease)
+  error_rate <- mean(svm_pred_class != valid_labels)
+  errors <- c(errors, error_rate)
+}
+print(errors)
+
+# choose the best kernel
+best_kernel <- kernels[which.min(errors)]
+print(best_kernel)
+
+```
+
+
+### Calculate the misclassification rate on test data (10 points)
+Solution:
+```{r}
+# use the best kernel for final training
+final_model <- svm(disease ~ ., data = CXR_train_pca2, kernel = best_kernel, probability = TRUE)
+print(final_model)
+
+# predict on the test data 
+class(CXR_test_pca$disease)
+test_pred_prob <- predict(final_model, newdata = CXR_test_pca[,-1], probability = TRUE)
+
+head(test_pred_prob)
+
+test_pred <- attr(test_pred_prob, "probabilities")
+
+test_pred_class <- colnames(test_pred)[max.col(test_pred, ties.method = "first")]
+test_labels <- as.character(CXR_test_pca$disease)
+misclassification_rate <- mean(test_pred_class != test_labels)
+
+cat("best kernel function：", best_kernel, "\n")
+cat("misclassification rate on the test set：", misclassification_rate, "\n")
+```
+
