@@ -1,0 +1,301 @@
+---
+title: "Multivariate_1"
+author: "DW"
+date: "2024-03-13"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+## Including Plots
+
+You can also embed plots, for example:
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+#Question 1:(Textbook1.19) Get data and Draw 2 graphs
+```{r}
+data <- read.csv("C:\\Users\\Synlim\\Desktop\\T4-6.csv")
+colnames(data) <- c('Independence','Support','Benevolence','Conformity','Leadership','Gender','Socio')
+
+mydata <- data[,c('Independence','Support','Benevolence','Conformity','Leadership')]
+head(mydata)
+```
+
+
+```{r}
+plot(1,1,type = 'n', xlim = c(0,nrow(mydata)), ylim = c(0,max(mydata)),xlab = 'X', ylab = 'Y', main = 'Scatter plot of data')
+nrow(mydata)
+for (i in 1:5){
+  points(c(1:nrow(mydata)),mydata[,i], col = i, pch=19)
+}
+legend("topright", legend=colnames(mydata), col=1:5, pch=19)
+#添加图例
+```
+```{r}
+pairs(~Independence + Support + Benevolence + Conformity + Leadership, data=mydata, main="Scatter plot of variables")
+```
+
+
+```{r}
+boxplot(mydata$Independence, mydata$Support, mydata$Benevolence, mydata$Conformity, mydata$Leadership,
+        names=c("Independence", "Support", "Benevolence", "Conformity", "Leadership"),
+        main="各变量箱线图")
+```
+
+#Question 2:(Textbook1.26a) Compute x_bar,Sn and R arrays. 
+
+$$ \bar{x_k} = \frac{1}{n} \sum_{i=1}^n x_{ik}$$
+According to the equation above,
+```{r}
+x_bar = colMeans(mydata)
+print(x_bar)
+class(x_bar)
+
+
+```
+Now we calculate the variance-covariance matrix Sn
+$$ s_{ik} = \frac{1}{n} \sum_{j=1}^n (x_{ji} - \bar{x_i})(x_{jk} - \bar{x_k})$$
+```{r}
+Sn = matrix(0, nrow = ncol(mydata), ncol = ncol(mydata))
+mydata <- as.matrix(mydata)
+bar_1 <-  c(15.58140,17.10853,18.82171,15.46512,11.73643)
+
+for (i in 1:ncol(mydata)){
+  bar_xi = bar_1[i]
+  for (k in 1:ncol(mydata)){
+    bar_xk = bar_1[k]
+    sum1 = 0
+    for (j in 1:nrow(mydata)){
+    sum1 <- sum1 + (mydata[j,i] - bar_xi)*(mydata[j,k] - bar_xk) 
+    }
+    sum1 <- sum1/nrow(mydata)
+    Sn[i,k] <- sum1
+  }
+  
+}
+print(Sn)
+print(nrow(mydata))
+print(ncol(mydata))
+
+```
+Now we need to calculate sample correlation matrix R
+$$ S = \frac{n}{n-1} S_n$$
+$$ R = D^{(-\frac{1}{2})} S D^{(-\frac{1}{2})}$$
+
+```{r}
+diag_ele <- diag(Sn)
+diag_ele <- sqrt(diag_ele)
+D_inv <- diag(1/diag_ele)
+S <- (nrow(mydata)/(nrow(mydata)-1)) * Sn
+R <- D_inv %*% S %*% D_inv
+print(R)
+```
+Most of the correlations are under 0.5, so the correlations are not that strong!
+
+#Question 3:(Textbook2.7)
+```{r}
+A <- Sn
+eigen_result <- eigen(A)
+eigenvalues <- eigen_result$values
+eigenvectors <- eigen_result$vectors
+
+print("Eigenvalues of A:")
+print(eigenvalues)
+
+print("Eigenvectors of A:")
+print(eigenvectors)
+```
+Now we get the eigen-decomposition of A
+$$ A = Q \lambda Q^{-1}$$
+```{r}
+Q <- eigenvectors
+lamb <- diag(eigenvalues)
+Q_inv <- solve(Q)
+print(Q)
+print(lamb)
+print(Q_inv)
+```
+Now we need to get A_inverse and the respective eigenvalues/vectors.
+```{r}
+A_inv <- solve(A)
+print(A_inv)
+eigen_result <- eigen(A_inv)
+eigenvalues <- eigen_result$values
+eigenvectors <- eigen_result$vectors
+cat('\n')
+print("Eigenvalues of A_inverse:")
+print(eigenvalues)
+
+print("Eigenvectors of A_inverse:")
+print(eigenvectors)
+
+```
+#Question 4:(Textbook4.39) Find possible outliers first
+Now we detect outliers
+$$z_{jk} = \frac{x_{jk} - \bar{x_k}}{\sqrt{s_{kk}}} $$
+
+```{r}
+#Make a dot plot for each variable
+#Pairwise scatter plot has been shown in the very start
+Z = matrix(0, nrow = nrow(mydata), ncol = ncol(mydata))
+for (k in 1:ncol(mydata)){
+  bar_x <- x_bar[k]
+  sq_skk <- sqrt(Sn[k,k])
+  for (j in 1:nrow(mydata)){
+    Z[j,k] <- (mydata[j,k] - bar_x)/sq_skk
+  }
+}
+head.matrix(Z)
+
+a <- any(abs(Z) > 3.5)
+if (a){
+  print('There are outliers')
+} else {
+  print('No outliers')
+}
+```
+
+```{r}
+S <- cov(mydata)
+S_inv <- solve(S)
+dj_s <- apply(mydata, 1, function(x) { #‘1’表示按行操作
+  (x - x_bar) %*% S_inv %*% (x - x_bar)
+})
+print(dj_s)
+# 按照d^2的值进行排序
+d_squared_sorted <- sort(dj_s)
+print(d_squared_sorted)
+# 计算χ²分布的理论分位数
+p <- (1:nrow(mydata)) / (nrow(mydata) + 1)
+chi_quantiles <- qchisq(p, df=ncol(mydata))
+print(chi_quantiles)
+# 绘制χ²-分位数图
+plot(chi_quantiles, d_squared_sorted, xlab="χ²分布的理论分位数", ylab="观测的马氏距离的平方", main="χ²-分位数图")
+abline(0, 1, col="red")  # 添加y=x参考线
+
+# 判断向量中的每个点是否超过卡方(0.0005)
+b <- any(dj_s > qchisq(0.9995,ncol(mydata)))
+if (b){
+  print('There are outliers')
+} else {
+  print('No outliers')
+}
+
+```
+
+Now we have proved that NO outliers exist
+## Test the marginal normal dist of mydata using QQ-Plot
+
+W统计量（W）：用于评估样本数据与正态分布之间的拟合程度。W值越接近1，表示数据越符合正态分布。
+
+p值（p-value）：表示在零假设（样本数据来自于正态分布）成立的情况下，观察到当前统计量或更极端统计量的概率。如果p值小于显著性水平（通常为0.05），则拒绝零假设，即认为数据不服从正态分布。
+```{r}
+#par(mfrow=c(2,2))
+for (i in 1:ncol(mydata)) {
+  hist(mydata[,i], main=paste("Histogram of Column", i), xlab="Values")
+  lines(density(mydata[,i]), col="red") #密度估计曲线
+}
+
+# 绘制 Q-Q 图
+#par(mfrow=c(1,1))
+for (i in 1:ncol(mydata)) {
+  qqnorm(mydata[,i], main=paste("Q-Q Plot of Column", i))
+  qqline(mydata[,i], col="red")
+}
+
+for (i in 1:ncol(mydata)){
+  print(shapiro.test(mydata[,i]))
+}
+```
+By which we know column[1,2,5] are not significantly normal!
+
+## Test the multi-normality
+
+We've seen from the graph from the Outliers test that the points are mostly near the line. But we still should use hypothesis testing.
+```{r}
+#install.packages('MVN')
+library(MVN)
+result <- mvn(mydata, mvnTest = "mardia")
+print(result)
+```
+From the result, we know the three 'YES' means mydata can be thought from multivariate normal!
+
+## For those non-normal, we adjust them to behave more normally,which is mydata[1,2,5]
+
+Below are the use of power transformation
+```{r}
+non_normal_data <- mydata[,c('Independence','Support','Leadership')]
+head.matrix(non_normal_data)
+class(non_normal_data)
+non_normal_data <- as.data.frame(non_normal_data)
+non_normal_data$Independence <- sqrt(non_normal_data$Independence)
+non_normal_data$Leadership <- sqrt(non_normal_data$Leadership)
+non_normal_data$Support <- (non_normal_data$Support)^1.5
+
+result1 <- shapiro.test(non_normal_data$Independence)
+result2 <- shapiro.test(non_normal_data$Leadership)
+result3 <- shapiro.test(non_normal_data$Support)
+print(result1)
+print(result2)
+print(result3)
+
+hist(non_normal_data$Independence, main="sqrt Transformation of indep")
+hist(non_normal_data$Support, main="sqrt Transformation of supp")
+hist(non_normal_data$Leadership, main="1.5square Transformation of leader")
+```
+Below are the use of Box-Cox
+```{r}
+#install.packages('MASS')
+library(MASS)
+non_normal_data <- mydata[,c('Independence','Support','Leadership')]
+non_normal_data <- as.data.frame(non_normal_data)
+# 需要先确定最佳lambda值
+indep_bc <- boxcox(non_normal_data$Independence ~ 1, plot = TRUE)
+supp_bc <- boxcox(non_normal_data$Support ~ 1, plot = FALSE)
+leader_bc <- boxcox(non_normal_data$Leadership ~ 1, plot = FALSE)
+lambda_indep <- indep_bc$x[which.max(indep_bc$y)]
+print(lambda_indep)
+lambda_supp <- supp_bc$x[which.max(supp_bc$y)]
+print(lambda_supp)
+lambda_leader <- leader_bc$x[which.max(leader_bc$y)]
+print(lambda_leader)
+#No case where lambda = 0
+
+# 应用Box-Cox转换
+non_normal_data$Independence <- ((non_normal_data$Independence^lambda_indep - 1) / lambda_indep)
+non_normal_data$Support <- ((non_normal_data$Support^lambda_supp - 1) / lambda_supp)
+non_normal_data$Leadership <- ((non_normal_data$Leadership^lambda_leader - 1) / lambda_leader)
+
+result1 <- shapiro.test(non_normal_data$Independence)
+result2 <- shapiro.test(non_normal_data$Leadership)
+result3 <- shapiro.test(non_normal_data$Support)
+print(result1)
+print(result2)
+print(result3)
+
+hist(non_normal_data$Independence, main="Transformation of indep")
+hist(non_normal_data$Support, main="transformation of supp")
+hist(non_normal_data$Leadership, main="Transformation of leader")
+
+```
+
+
+
+
+
+
+
+
+
+
